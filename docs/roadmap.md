@@ -4,7 +4,7 @@
 
 ## 0) Bootstrap & Sanity (can run app)
 
-1. **Create Flutter app (if not yet) & wire Firebase**
+1. **Create Flutter app (if not yet) & wire Firebase** (done)
 
    * `flutter create ai_tutor_dashboard` → open in IDE.
    * `dart pub add firebase_core cloud_firestore flutter_hooks hooks_riverpod` (or Provider if you prefer).
