@@ -31,3 +31,29 @@ final childGoalsProvider = StreamProvider<List<Goal>>((ref) {
   if (rootId == null) return const Stream<List<Goal>>.empty();
   return repo.streamChildren(rootId);
 });
+
+/// Which goal is being edited in the drawer? (null = closed)
+class EditingGoalId extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void open(String id) => state = id;
+  void close() => state = null;
+}
+
+final editingGoalIdProvider = NotifierProvider<EditingGoalId, String?>(
+  EditingGoalId.new,
+);
+
+/// Stream the single goal being edited
+final editingGoalProvider = StreamProvider<Goal?>((ref) {
+  final id = ref.watch(editingGoalIdProvider);
+  if (id == null) return const Stream.empty();
+  final repo = ref.watch(goalsRepositoryProvider);
+  return repo.streamGoal(id); // ← direct single-doc stream
+});
+
+/// For parent dropdown
+final allGoalsProvider = StreamProvider<List<Goal>>((ref) {
+  final repo = ref.watch(goalsRepositoryProvider);
+  return repo.streamAllGoals();
+});
