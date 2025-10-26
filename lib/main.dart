@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
-void main() {
-  runApp(const MainApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const GoalsApp());
 }
 
-class MainApp extends StatelessWidget {
-  const MainApp({super.key});
-
+class GoalsApp extends StatelessWidget {
+  const GoalsApp({super.key});
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
+      title: 'AI Tutor Dashboard',
       home: Scaffold(
-        body: Center(
-          child: Text('Hello World!'),
-        ),
+        appBar: AppBar(title: Text('Goals')),
+        body: Center(child: Text('Hello, goals 👋')),
       ),
     );
   }

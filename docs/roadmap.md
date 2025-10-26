@@ -1,280 +1,213 @@
-Perfect—thanks for the crisp decisions. Below is a **task-oriented execution plan** (no code) you can follow to ship the MVP quickly. Each task has concrete steps and a clear “Done” state.
+# Build Roadmap — Single-Page Goals (Flutter + Firestore)
+
+> Target: Windows desktop (dev), Flutter 3.29, Firebase 13.32.0, Firestore. One route: `/goals`. Autosave on blur, inline reorder, dropdown reparent, cascade delete.
+
+## 0) Bootstrap & Sanity (can run app)
+
+1. **Create Flutter app (if not yet) & wire Firebase**
+
+   * `flutter create ai_tutor_dashboard` → open in IDE.
+   * `dart pub add firebase_core cloud_firestore flutter_hooks hooks_riverpod` (or Provider if you prefer).
+   * `dart pub add uuid collection`
+   * `flutterfire configure` → include Windows; commit generated `firebase_options.dart`.
+   * **Run app**: render a blank `Scaffold("Goals")`.
+
+   ✅ *Run & Verify*: App launches on Windows.
+
+2. **Project structure**
+
+   * Add folders: `lib/core/`, `lib/data/`, `lib/features/goals/`, `lib/widgets/`.
+   * Create `lib/core/logger.dart` (simple print wrapper), `core/result.dart` (Result/Either if you like).
+
+   ✅ *Run & Verify*: Still compiles.
 
 ---
 
-# MVP Roadmap — Teacher Dashboard (Goals)
+## 1) Data model & Firestore wiring (can list roots)
 
-**Decisions locked in**
+3. **Goal model (lean)**
 
-* Single writer (you). Student app will later write progress to other parts of the DB.
-* List navigation = **click-through pages**.
-* **Cascade delete** (delete a goal also deletes its descendants).
-* **Reparent** allowed.
-* Optional goals **always visible** (with a badge).
-* Suggestions: **press Enter to add**, remove with “x”.
-* **Autosave on blur** with a short debounce.
+   * Fields: `id`, `title`, `description?`, `parentId?`, `order`, `optional=false`, `suggestions=[]`, `tags=[]`. Matches your spec.
 
----
+4. **Repository (Firestore)**
 
-## Phase 0 — Hygiene & Scope (30–45 min)
+   * `GoalsRepository` with:
 
-### Task 0.1 — Field spec (single source of truth)
+     * `streamRoots()` → `parentId == null` ordered by `order`.
+     * `streamChildren(parentId)` → ordered by `order`.
+     * `createRoot(title)` → `order = last+1000`.
+     * `createChild(parentId, title)` → `order = last+1000`.
+   * Add index note: `(parentId ASC, order ASC)` (already in your plan).
 
-**Steps**
+5. **Seed (optional)**
 
-1. Create `docs/goal-spec.md` (one page).
-2. List fields and defaults you will manage:
+   * If your Phase 1 docs already created a few nodes in Firestore, skip; otherwise add one root programmatically once.
 
-   * `title` (required)
-   * `description` (optional plaintext)
-   * `parentId` (nullable; root = null)
-   * `order` (int; gapped increments, e.g., 1000)
-   * `optional` (bool; default false)
-   * `suggestions` (string list; default empty)
-   * `tags` (string list; default empty)
-3. Add behavior notes:
+6. **Simple UI: roots list**
 
-   * Cascade delete
-   * Reparent allowed
-   * Reorder within siblings
-   * Autosave on blur (debounced)
+   * Left column: `ListView` streaming `streamRoots()`.
+   * Show: title, optional badge, child-count placeholder (0 for now), View/+ buttons disabled.
 
-**Done**
-
-### Task 0.2 — Privacy policy for MVP
-
-**Steps**
-
-1. Decide read access now: **Private** (only you read/write) or **read-only for signed-in** users.
-2. Add a 2-line note in `docs/security.md` describing the current policy and the later “student-app will write progress” scope.
-
-**Done**
+   ✅ *Run & Verify*: Roots appear and update live.
 
 ---
 
-## Phase 1 — Firestore Setup (30–45 min)
+## 2) Children list within selected root (can browse hierarchy)
 
-### Task 1.1 — Seed structure & examples
+7. **Selection state**
 
-**Steps**
+   * Add provider/state: `selectedRootId` (nullable).
+   * Clicking a root row sets selection.
 
-1. Create collection **`goals`**.
-2. Add 4–6 documents that cover:
+8. **Children stream**
 
-   * 2 root goals (one with `optional: true`)
-   * Each root has 1–2 children (at least one with `suggestions` and `tags`)
-   * Use `order` values 1000, 2000, …
-3. Copy the JSON of these docs into `seed/initial-goals.json` for reference.
+   * Below selected root, render its children via `streamChildren(selectedRootId)`.
 
-**Done**
+9. **Child-count chip**
 
-### Task 1.2 — Security rules (concept)
+   * Compute with a lightweight count query or cached stream length per root row.
 
-**Steps**
-
-1. Implement rules that:
-
-   * Allow only you to write to `goals`.
-   * Allow read according to your privacy choice.
-2. Note your UID in `docs/security.md` (do not store credentials in the repo).
-
-**Done**
-
-### Task 1.3 — Index checklist
-
-**Steps**
-
-1. Try the following queries in the Firestore console UI (or your app later):
-
-   * List roots **sorted by `order`**.
-   * List children **for a parent** sorted by `order`.
-2. If Firestore requests indexes, create them and capture their descriptions in `docs/indexes.md`. Likely:
-
-   * `(parentId ASC, order ASC)`
-   * If you later filter optional within a parent: `(parentId ASC, optional ASC, order ASC)`
-
-**Done**
+   ✅ *Run & Verify*: Select a root; children appear underneath; counts look right.
 
 ---
 
-## Phase 2 — Navigation & Pages (45–60 min)
+## 3) Details pane (read-only → editable)
 
-### Task 2.1 — Route map (no code, just a list)
+10. **Details pane shell (right column)**
 
-**Steps**
+    * When a row (root or child) is “View” → set `selectedGoalId`, open pane; show read-only fields first.
 
-1. Document the route paths and page purpose in `docs/routes.md`:
+    ✅ *Run & Verify*: Pane opens/close; no editing yet.
 
-   * `/goals` — shows root goals (click a row to open its children page)
-   * `/goals/:id` — shows **children of that goal** + actions
-   * `/goals/:id/edit` — editor for that goal
-   * `/goals/new?parentId=…` — create form (optional parent preselected)
+11. **Editable fields**
 
-**Done when** the routes are listed and stable.
+    * Inputs for: title, description (multiline), optional toggle, suggestions (multiline 1/line), tags (comma list).
+    * Convert Firestore arrays ↔ textarea/string.
 
-### Task 2.2 — “Row content & actions” spec
+12. **Autosave on blur (debounced)**
 
-**Steps**
+    * Debounce ~500ms; only write changed fields.
+    * Visual feedback: tiny spinner or “Saving…” indicator; snackbar “Saved”.
+    * Handle errors: snackbar “Save failed”; keep local state until next change.
 
-1. In `docs/ui-goal-list.md`, define:
-
-   * What each row shows: `title`, optional badge (if `optional`), counts (`tags`, `suggestions`), an affordance to navigate into children.
-   * Quick actions menu: **Add child**, **Edit**, **Delete**, **Reorder**.
-   * Empty state text and CTA for: no goals / no children.
-2. Define sort behavior: strictly ascending by `order`.
-
-**Done when** the document is specific enough that someone else could build the list without guessing.
+    ✅ *Run & Verify*: Edit fields, blur → data persists; refresh proves it.
 
 ---
 
-## Phase 3 — CRUD & Data Operations (60–90 min)
+## 4) Add & reorder (inline)
 
-### Task 3.1 — Create & Edit behavior
+13. **Add root (“+ Add root goal”)**
 
-**Steps**
+    * Calls `createRoot("New goal")` → select it → open pane.
 
-1. In `docs/ui-goal-editor.md`, define:
+14. **Add child (+ in root row)**
 
-   * Autosave triggers: on blur of `title`, `description`, `optional`, chips.
-   * Debounce window (e.g., ~400–600ms) to avoid excessive writes.
-   * Validation: `title` required (define minimum length if desired).
-   * Parent selection:
+    * Calls `createChild(rootId, "New sub-goal")` → select it → open pane.
 
-     * On **create**: parent optional; if set, new goal appears at the **end** of that parent’s list.
-     * On **edit**: parent **can be changed** (reparent).
-   * Suggestions: input field that adds on Enter; duplicates not allowed; remove with “x”.
-   * Tags: same pattern as suggestions.
+15. **Up/Down (roots and children)**
 
-**Done when** every field and interaction is unambiguous.
+    * Compute target neighbor; **swap `order`** for the two docs with a batched write.
+    * Optimistic UI: move immediately; rollback on failure.
+    * **Normalize** helper: when adjacent gap < 10, renumber sibling list by 1000’s, in one batch.
 
-### Task 3.2 — Reorder policy
-
-**Steps**
-
-1. In `docs/reordering.md`, define:
-
-   * Scope: **within siblings only**.
-   * Interaction: Drag handle or “Move up/down” buttons (choose one now).
-   * Numbering: gapped integers (1000 steps).
-   * Normalization rule: if any two adjacent orders differ by <10 (or your threshold), renumber that sibling range by 1000 increments.
-
-**Done when** the renumbering rule is written and future-you won’t question it.
-
-### Task 3.3 — Reparent policy
-
-**Steps**
-
-1. In `docs/reparenting.md`, define:
-
-   * Allowed from the editor.
-   * On reparent:
-
-     * Set `parentId` to the new parent (or null).
-     * New `order`: append at end of the new sibling list (last + 1000).
-   * Confirm any side effects:
-
-     * Cascade delete still means the whole subtree goes if the **parent node** is later deleted.
-   * (Breadcrumbs/ancestry are **not** required now; skip extra fields.)
-
-**Done when** the steps to reparent are clear and predictable.
-
-### Task 3.4 — Cascade delete policy
-
-**Steps**
-
-1. In `docs/delete.md`, define:
-
-   * “Delete” on a node **removes the entire subtree**.
-   * Confirmation dialog text: mention the number of descendants if feasible (optional).
-   * Document a safety note: accidental deletes are destructive; consider trash/undo later (backlog).
-
-**Done when** there’s no ambiguity about what “Delete” does.
+    ✅ *Run & Verify*: Reorder up/down for roots & children; refresh persists order.
 
 ---
 
-## Phase 4 — Global UX (30–45 min)
+## 5) Reparent (dropdown of root titles)
 
-### Task 4.1 — Loading & error surfaces
+16. **Parent dropdown**
 
-**Steps**
+    * Populate with all **root** titles + “None (root)”.
+    * When changed:
 
-1. In `docs/ux-system.md`, specify:
+      * Update `parentId` (or null) and set `order = last+1000` under new parent.
+      * Batch both fields in one transaction.
+      * Move selection to stay on the same goal; UI list updates.
 
-   * Loading: global overlay during blocking actions; inline progress for lists.
-   * Errors: transient snackbar for non-critical; dialog for destructive/failed delete/reparent.
-   * Auto-dismiss: snackbars auto-dismiss; dialogs require explicit action.
-
-**Done when** the same patterns can be applied everywhere without new decisions.
-
-### Task 4.2 — Confirmations
-
-**Steps**
-
-1. List actions that require confirmation:
-
-   * **Delete (cascade)** → “Delete goal and all sub-goals?”
-   * **Reparent** if it changes many descendants (optional) → “Move goal to …?”
-2. Set button labels (primary = action verb; secondary = Cancel).
-3. Add this to `docs/ux-system.md`.
-
-**Done when** destructive flows are covered.
+    ✅ *Run & Verify*: Move a child to another root and back; orders correct.
 
 ---
 
-## Phase 5 — Testing & Guardrails (45–60 min)
+## 6) Delete (cascade)
 
-### Task 5.1 — Manual test script (keep in repo)
+17. **Cascade delete service**
 
-**Steps**
+    * `deleteSubtree(goalId)`:
 
-1. Create `tests/manual-mvp-checklist.md` with steps:
+      * DFS/BFS: collect goal + all descendants (query children by `parentId`).
+      * Batch deletes in chunks (e.g., 300–450 ops per batch) until done.
+      * Dialog confirm: “Delete this goal and all its sub-goals? This cannot be undone.” (as per your policy).
 
-   * Create 2 roots; add children under one.
-   * Add/remove suggestions; verify Enter-to-add works and no duplicates.
-   * Toggle optional on a child; confirm badge shows.
-   * Reorder siblings; refresh; verify order is persistent.
-   * Reparent a child to the other root; confirm it appears at the end.
-   * Delete a root with descendants; confirm **all** are gone.
-   * Sign in as a non-owner (if applicable) to verify denied writes.
+18. **UI hook**
 
-**Done when** the list runs in ~5 minutes and catches regressions.
+    * Delete button in details pane; disable while running; snackbar on success/fail.
 
-### Task 5.2 — Emulator plan (optional but recommended)
-
-**Steps**
-
-1. Decide whether to use Firebase Emulator Suite.
-2. If yes, add a one-line plan in `docs/dev-notes.md` describing how you’ll seed 5–10 example docs at startup (manual import for now is fine).
-
-**Done when** you know how test data appears during development.
+    ✅ *Run & Verify*: Delete root with children; verify all gone.
 
 ---
 
-## Phase 6 — Student-App Future Hook (5–10 min now)
+## 7) Polish UX (loading, errors, keyboard)
 
-### Task 6.1 — Reserve namespaces only
+19. **Loading surfaces**
 
-**Steps**
+    * Inline spinner while initial streams load; dim rows during writes.
+    * Snackbars: “Saved / Save failed / Order saved / Delete failed”.
+    * Connection-lost dialog if Firestore unavailable (optional).
 
-1. In `docs/future-student-app.md`, note:
+20. **Keyboard**
 
-   * Student progress will live in different collections (e.g., `progress`, `attempts`) with separate write rules.
-   * Teacher app will **not** write to those collections.
-   * No schema needed now—just the boundary statement.
+    * Up/Down to move selection; Enter = View/open pane; Esc = close pane.
+    * (Optional) Ctrl+R triggers normalization across current sibling list.
 
-**Done when** the boundary is written so you won’t mix concerns later.
+21. **Visuals**
+
+    * Indent children; optional badge in accent color; hover highlights; focus ring for keyboard.
+
+    ✅ *Run & Verify*: Play through the common flows; confirm consistent feedback.
 
 ---
 
-# “Definition of Done” for MVP (one glance)
+## 8) Guardrails & small quality boosts
 
-* You can create/edit goals (with parent selection), add/remove suggestions and tags, toggle optional.
-* You can **navigate** via click-through pages (roots → children → editor).
-* You can **reorder** within siblings; the ordering policy and normalization are honored.
-* You can **reparent** a goal; it appears at the end of the new sibling list.
-* You can **cascade delete** any node; all descendants are removed.
-* Loading and errors follow the **same** UI rules everywhere.
-* Rules enforce your chosen privacy; only you can write.
-* No “needs index” errors in your normal flows.
-* The manual test script passes.
+22. **Validation**
+
+    * Prevent empty title: if user clears, show inline hint and don’t write empty titles.
+
+23. **Small perf win**
+
+    * Only stream children for the **selected** root (not for all roots at once).
+
+24. **Logs**
+
+    * Log write failures with goalId + fields for quick debugging.
+
+    ✅ *Run & Verify*: Create/edit/reorder/reparent/delete across ~30–50 nodes comfortably.
+
+---
+
+## 9) Security & indexes cross-check (already decided)
+
+25. **Rules sanity**
+
+    * Ensure only your UID can write; reads private (as you specified).
+
+26. **Index**
+
+    * Verify `(parentId, order)` is present/used; create if Firestore prompts.
+
+---
+
+## 10) Done criteria (for this MVP)
+
+* Single page `/goals` implements everything:
+
+  * Create/edit with **autosave on blur**.
+  * Inline **reorder** (roots + children) with normalization.
+  * **Reparent** via root-dropdown.
+  * **Cascade delete** with confirm.
+  * Consistent loading/error feedback and keyboard nav.
+* Data matches your **goal spec**; rules match your **privacy** stance.
+
+---
 
