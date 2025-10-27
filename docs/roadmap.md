@@ -153,7 +153,6 @@
 
     * Inline spinner while initial streams load; dim rows during writes.
     * Snackbars: “Saved / Save failed / Order saved / Delete failed”.
-    * Connection-lost dialog if Firestore unavailable (optional).
 
 20. **Keyboard**
 

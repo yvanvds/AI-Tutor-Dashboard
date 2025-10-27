@@ -4,6 +4,7 @@ import '../../data/goal_providers.dart';
 import '../../data/goals_repository.dart';
 import '../../data/goal.dart';
 import '../../widgets/chips_editor.dart';
+import '../../widgets/undo_snackbar.dart';
 
 class EditGoalPanel extends ConsumerWidget {
   const EditGoalPanel({super.key});
@@ -133,6 +134,71 @@ class _EditFormState extends ConsumerState<_EditForm> {
         title: const Text('Edit goal'),
         automaticallyImplyLeading: false,
         actions: [
+          IconButton(
+            tooltip: 'Delete',
+            icon: const Icon(Icons.delete),
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(
+                context,
+              ); // <-- capture BEFORE awaits/closing
+              final repo = widget.repo;
+              final id = widget.goal.id;
+
+              // Count children for safety messaging
+              final count = await repo.countDescendants(id);
+              final confirmed =
+                  await showDialog<bool>(
+                    context: context,
+                    builder: (dCtx) {
+                      return AlertDialog(
+                        title: const Text('Delete goal'),
+                        content: Text(
+                          count == 0
+                              ? 'Delete “${widget.goal.title}”?'
+                              : 'Delete “${widget.goal.title}” and its $count descendant(s)?',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dCtx, false),
+                            child: const Text('Cancel'),
+                          ),
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.error,
+                            ),
+                            onPressed: () => Navigator.pop(dCtx, true),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      );
+                    },
+                  ) ??
+                  false;
+
+              if (!confirmed) return;
+
+              // Backup → delete → Undo
+              final backup = await repo.backupSubtree(id);
+              await repo.deleteSubtree(id);
+
+              // Close the editor if we just deleted the opened node
+              if (mounted) {
+                ref.read(editingGoalIdProvider.notifier).close();
+              }
+
+              showUndoSnackBar(
+                messenger,
+                message:
+                    count == 0
+                        ? 'Deleted "${widget.goal.title}".'
+                        : 'Deleted "${widget.goal.title}" (+$count).',
+                onUndo: () async {
+                  await repo.restoreSubtree(backup);
+                },
+              );
+            },
+          ),
           IconButton(
             tooltip: 'Close',
             onPressed: () => ref.read(editingGoalIdProvider.notifier).close(),

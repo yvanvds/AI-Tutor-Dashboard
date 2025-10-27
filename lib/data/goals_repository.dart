@@ -1,6 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'goal.dart';
 
+class SubtreeBackup {
+  SubtreeBackup(this.nodes);
+
+  /// Each entry: id + full raw data map (including parentId, order, etc.)
+  final List<(String id, Map<String, dynamic> data)> nodes;
+}
+
 class GoalsRepository {
   // Make the collection strongly typed to avoid casts later:
   final CollectionReference<Map<String, dynamic>> _col = FirebaseFirestore
@@ -93,4 +100,106 @@ class GoalsRepository {
       .orderBy('title')
       .snapshots()
       .map((s) => s.docs.map(Goal.fromDoc).toList());
+
+  Future<void> applyOrder(String? parentId, List<String> orderedIds) async {
+    final batch = FirebaseFirestore.instance.batch();
+    // compact with spacing 1000 to keep room for future inserts
+    for (var i = 0; i < orderedIds.length; i++) {
+      final id = orderedIds[i];
+      final doc = _col.doc(id);
+      batch.update(doc, {'order': (i + 1) * 1000, 'parentId': parentId});
+    }
+    await batch.commit();
+  }
+
+  /// Read children once (used to compute target list on drop)
+  Future<List<Goal>> getChildrenOnce(String? parentId) async {
+    Query<Map<String, dynamic>> q = _col.orderBy('order');
+    q =
+        parentId == null
+            ? q.where('parentId', isNull: true)
+            : q.where('parentId', isEqualTo: parentId);
+    final s = await q.get();
+    return s.docs.map(Goal.fromDoc).toList();
+  }
+
+  Future<Goal?> getGoalOnce(String id) async {
+    final d = await _col.doc(id).get();
+    if (!d.exists) return null;
+    return Goal.fromDoc(d);
+  }
+
+  /// Load *all* goals once (≤100 so it's fine) and build a map by id.
+  Future<Map<String, Goal>> _getAllGoalsMap() async {
+    final s = await _col.get();
+    final map = <String, Goal>{};
+    for (final d in s.docs) {
+      map[d.id] = Goal.fromDoc(d);
+    }
+    return map;
+  }
+
+  /// Collect the subtree (root+descendants) under [rootId].
+  Future<List<Goal>> _collectSubtree(String rootId) async {
+    final all = await _getAllGoalsMap();
+    final List<Goal> out = [];
+    final q = <String>[rootId];
+    while (q.isNotEmpty) {
+      final id = q.removeLast();
+      final node = all[id];
+      if (node == null) continue;
+      out.add(node);
+      // push children
+      for (final g in all.values) {
+        if (g.parentId == id) q.add(g.id);
+      }
+    }
+    return out;
+  }
+
+  /// Backup the subtree as raw maps so we can restore 1:1 (same ids).
+  Future<SubtreeBackup> backupSubtree(String rootId) async {
+    final nodes = await _collectSubtree(rootId);
+    final out = <(String, Map<String, dynamic>)>[];
+    for (final g in nodes) {
+      out.add((
+        g.id,
+        {
+          'title': g.title,
+          'description': g.description,
+          'parentId': g.parentId, // may be null
+          'order': g.order,
+          'optional': g.optional,
+          'tags': g.tags,
+          'suggestions': g.suggestions,
+        },
+      ));
+    }
+    return SubtreeBackup(out);
+  }
+
+  /// Delete every node in the subtree (root first/last doesn't matter in batch).
+  Future<void> deleteSubtree(String rootId) async {
+    final nodes = await _collectSubtree(rootId);
+    final batch = FirebaseFirestore.instance.batch();
+    for (final g in nodes) {
+      batch.delete(_col.doc(g.id));
+    }
+    await batch.commit();
+  }
+
+  /// Restore a previously backed-up subtree (same ids).
+  Future<void> restoreSubtree(SubtreeBackup backup) async {
+    final batch = FirebaseFirestore.instance.batch();
+    for (final (id, data) in backup.nodes) {
+      batch.set(_col.doc(id), data, SetOptions(merge: false));
+    }
+    await batch.commit();
+  }
+
+  /// Convenience: count descendants (excludes the root).
+  Future<int> countDescendants(String rootId) async {
+    final subtree = await _collectSubtree(rootId);
+    return (subtree.length - 1).clamp(0, 1 << 31);
+  }
 }
