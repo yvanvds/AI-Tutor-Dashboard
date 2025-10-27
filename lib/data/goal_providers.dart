@@ -2,11 +2,12 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'goals_repository.dart';
 import 'goal.dart';
 
+// Repository provider
 final goalsRepositoryProvider = Provider<GoalsRepository>((ref) {
   return GoalsRepository();
 });
 
-/// Notifier-based selection (Riverpod 3 preferred)
+// Selected root goal id state
 class SelectedRootId extends Notifier<String?> {
   @override
   String? build() => null; // no selection initially
@@ -14,8 +15,22 @@ class SelectedRootId extends Notifier<String?> {
   void clear() => state = null;
 }
 
+/// Which goal is being edited in the drawer? (null = closed)
+class EditingGoalId extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void open(String id) => state = id;
+  void close() => state = null;
+}
+
+// Selected root goal id (for viewing its children)
 final selectedRootIdProvider = NotifierProvider<SelectedRootId, String?>(
   SelectedRootId.new,
+);
+
+// Editing goal id state
+final editingGoalIdProvider = NotifierProvider<EditingGoalId, String?>(
+  EditingGoalId.new,
 );
 
 /// Stream of root goals (StreamProvider is fine to keep)
@@ -31,18 +46,6 @@ final childGoalsProvider = StreamProvider<List<Goal>>((ref) {
   if (rootId == null) return const Stream<List<Goal>>.empty();
   return repo.streamChildren(rootId);
 });
-
-/// Which goal is being edited in the drawer? (null = closed)
-class EditingGoalId extends Notifier<String?> {
-  @override
-  String? build() => null;
-  void open(String id) => state = id;
-  void close() => state = null;
-}
-
-final editingGoalIdProvider = NotifierProvider<EditingGoalId, String?>(
-  EditingGoalId.new,
-);
 
 /// Stream the single goal being edited
 final editingGoalProvider = StreamProvider<Goal?>((ref) {

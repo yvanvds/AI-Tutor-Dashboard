@@ -1,1 +1,29 @@
-{"flutter":{"platforms":{"dart":{"lib/firebase_options.dart":{"projectId":"ai-tutor-python","configurations":{"web":"1:825992451069:web:2c5cac2ae59f3b1a3cff94","windows":"1:825992451069:web:09a586fde9f472da3cff94"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "ai-tutor-python",
+          "configurations": {
+            "web": "1:825992451069:web:2c5cac2ae59f3b1a3cff94",
+            "windows": "1:825992451069:web:09a586fde9f472da3cff94"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

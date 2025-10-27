@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Model class representing a Goal.
 class Goal {
   final String id;
   final String title;
@@ -8,8 +9,8 @@ class Goal {
   final int order;
   final bool optional;
   final List<String> suggestions;
-  final List<String> tags;
 
+  // Constructor
   Goal({
     required this.id,
     required this.title,
@@ -18,9 +19,9 @@ class Goal {
     required this.order,
     this.optional = false,
     this.suggestions = const [],
-    this.tags = const [],
   });
 
+  // Create a Goal from a Firestore document.
   factory Goal.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data()!;
     return Goal(
@@ -31,10 +32,10 @@ class Goal {
       order: d['order'] ?? 0,
       optional: d['optional'] ?? false,
       suggestions: List<String>.from(d['suggestions'] ?? []),
-      tags: List<String>.from(d['tags'] ?? []),
     );
   }
 
+  // Convert a Goal to a map for Firestore storage.
   Map<String, dynamic> toMap() => {
     'title': title,
     'description': description,
@@ -42,6 +43,5 @@ class Goal {
     'order': order,
     'optional': optional,
     'suggestions': suggestions,
-    'tags': tags,
   };
 }

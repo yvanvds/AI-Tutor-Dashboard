@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+/// A simple sign-in page with email and password fields.
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
   @override

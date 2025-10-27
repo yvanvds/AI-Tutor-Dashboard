@@ -1,62 +1,23 @@
+import 'package:ai_tutor_dashboard/features/goals/editor/parent_field.dart';
+import 'package:ai_tutor_dashboard/widgets/chips_editor.dart';
+import 'package:ai_tutor_dashboard/widgets/undo_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import '../../data/goal_providers.dart';
-import '../../data/goals_repository.dart';
-import '../../data/goal.dart';
-import '../../widgets/chips_editor.dart';
-import '../../widgets/undo_snackbar.dart';
 
-class EditGoalPanel extends ConsumerWidget {
-  const EditGoalPanel({super.key});
+import '../../../data/goal.dart';
+import '../../../data/goal_providers.dart';
+import '../../../data/goals_repository.dart';
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final editingId = ref.watch(editingGoalIdProvider);
-    final goalAsync = ref.watch(editingGoalProvider);
-    final repo = ref.watch(goalsRepositoryProvider);
-
-    final isOpen = editingId != null;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
-      width: isOpen ? 420 : 0,
-      decoration: BoxDecoration(
-        border:
-            isOpen
-                ? Border(
-                  left: BorderSide(color: Theme.of(context).dividerColor),
-                )
-                : null,
-        color: Theme.of(context).colorScheme.surface,
-      ),
-      child:
-          isOpen
-              ? goalAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('Error: $e')),
-                data: (goal) {
-                  if (goal == null) {
-                    return const Center(child: Text('Goal not found.'));
-                  }
-                  return _EditForm(goal: goal, repo: repo);
-                },
-              )
-              : const SizedBox.shrink(),
-    );
-  }
-}
-
-class _EditForm extends ConsumerStatefulWidget {
-  const _EditForm({required this.goal, required this.repo});
+class GoalForm extends ConsumerStatefulWidget {
+  const GoalForm({required this.goal, required this.repo});
   final Goal goal;
   final GoalsRepository repo;
 
   @override
-  ConsumerState<_EditForm> createState() => _EditFormState();
+  ConsumerState<GoalForm> createState() => GoalFormState();
 }
 
-class _EditFormState extends ConsumerState<_EditForm> {
+class GoalFormState extends ConsumerState<GoalForm> {
   late final TextEditingController _title;
   late final TextEditingController _desc;
   bool _optional = false;
@@ -70,7 +31,7 @@ class _EditFormState extends ConsumerState<_EditForm> {
   }
 
   @override
-  void didUpdateWidget(covariant _EditForm oldWidget) {
+  void didUpdateWidget(covariant GoalForm oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.goal.id != widget.goal.id) {
       _title.text = widget.goal.title;
@@ -88,47 +49,6 @@ class _EditFormState extends ConsumerState<_EditForm> {
 
   @override
   Widget build(BuildContext context) {
-    // Only roots in the parent dropdown
-    final rootsAsync = ref.watch(rootGoalsProvider);
-
-    Widget parentField;
-    parentField = rootsAsync.when(
-      loading:
-          () => const SizedBox(
-            height: 56,
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          ),
-      error: (e, _) => Text('Failed to load parents: $e'),
-      data: (roots) {
-        final items = <DropdownMenuItem<String?>>[
-          const DropdownMenuItem<String?>(
-            value: null,
-            child: Text('(no parent)'),
-          ),
-          ...roots
-              .where((g) => g.id != widget.goal.id) // avoid self as parent
-              .map(
-                (g) => DropdownMenuItem<String?>(
-                  value: g.id,
-                  child: Text(g.title),
-                ),
-              ),
-        ];
-        return DropdownButtonFormField<String?>(
-          value: widget.goal.parentId, // may be null
-          items: items,
-          onChanged: (newParent) async {
-            if (newParent == widget.goal.parentId) return;
-            await widget.repo.reparent(widget.goal.id, newParent);
-          },
-          decoration: const InputDecoration(
-            labelText: 'Parent',
-            border: OutlineInputBorder(),
-          ),
-        );
-      },
-    );
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit goal'),
@@ -226,14 +146,16 @@ class _EditFormState extends ConsumerState<_EditForm> {
                 ) {}, // explicit save on submit; we already have inline title elsewhere
           ),
           const SizedBox(height: 12),
-          parentField,
+          widget.goal.parentId != null
+              ? ParentField(goal: widget.goal, repo: widget.repo)
+              : const SizedBox.shrink(),
           const SizedBox(height: 12),
 
           TextField(
             controller: _desc,
-            maxLines: 4,
+            maxLines: 3,
             decoration: const InputDecoration(
-              labelText: 'Description',
+              labelText: 'Describe this goal for students.',
               border: OutlineInputBorder(),
             ),
             onChanged:
@@ -252,14 +174,6 @@ class _EditFormState extends ConsumerState<_EditForm> {
             },
             title: const Text('Optional'),
             contentPadding: EdgeInsets.zero,
-          ),
-          const SizedBox(height: 12),
-
-          ChipsEditor(
-            label: 'Tags',
-            values: widget.goal.tags,
-            hintText: 'Type a tag and hit Enter',
-            onChanged: (vals) => widget.repo.updateTags(widget.goal.id, vals),
           ),
           const SizedBox(height: 12),
 

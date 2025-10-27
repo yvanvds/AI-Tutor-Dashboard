@@ -61,12 +61,12 @@ class _ChipsEditorState extends State<ChipsEditor> {
             labelText: widget.label,
             border: const OutlineInputBorder(),
           ),
-          child: Wrap(
+          child: Column(
             spacing: 8,
-            runSpacing: -8,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               for (final v in _items)
-                InputChip(label: Text(v), onDeleted: () => _remove(v)),
+                _MultiLineChip(text: v, onDeleted: () => _remove(v)),
               ConstrainedBox(
                 constraints: const BoxConstraints(minWidth: 120, maxWidth: 240),
                 child: TextField(
@@ -82,6 +82,53 @@ class _ChipsEditorState extends State<ChipsEditor> {
           ),
         ),
       ],
+    );
+  }
+}
+
+///
+/// A custom “chip” that supports wrapped, multi-line text.
+/// Looks and behaves like an InputChip.
+///
+class _MultiLineChip extends StatelessWidget {
+  const _MultiLineChip({required this.text, required this.onDeleted});
+
+  final String text;
+  final VoidCallback onDeleted;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: ShapeDecoration(
+        color:
+            theme.chipTheme.backgroundColor ?? theme.colorScheme.surfaceVariant,
+        shape: const StadiumBorder(),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Flexible(
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium,
+              softWrap: true,
+            ),
+          ),
+          const SizedBox(width: 4),
+          InkWell(
+            onTap: onDeleted,
+            borderRadius: BorderRadius.circular(12),
+            child: Icon(
+              Icons.cancel,
+              size: 18,
+              color: theme.iconTheme.color?.withOpacity(0.6),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
